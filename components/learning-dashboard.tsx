@@ -2,7 +2,8 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Lock, CheckCircle2, Terminal } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Lock, CheckCircle2, Terminal, Sparkles } from "lucide-react"
 
 interface LearningPath {
   id: string
@@ -100,6 +101,14 @@ export default function LearningDashboard({ onSelectPath }: LearningDashboardPro
           </div>
           <p className="text-gray-600 text-lg">Master OpenSSL through interactive terminal-based learning paths</p>
         </div>
+
+        <Button
+          className="w-full mb-8 h-14 text-lg font-semibold bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 shadow-lg hover:shadow-xl transition-all duration-200"
+          size="lg"
+        >
+          <Sparkles className="w-5 h-5 mr-2" />
+          Learn with AI
+        </Button>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {learningPaths.map((path) => (
