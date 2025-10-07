@@ -60,6 +60,7 @@ export default function CSRLearningModule() {
         <main className="min-h-screen flex flex-col p-4 gap-4">
           <div className="flex-shrink-0">
             <h1 className="text-3xl font-bold mb-1">OpenSSL Learning Module</h1>
+            <p className="text-lg font-semibold text-gray-800 mb-1">Certificate Signing Request (CSR) with OpenSSL</p>
             <p className="text-sm text-gray-600">
               Interactive terminal-based learning for Certificate Signing Requests
             </p>
