@@ -14,14 +14,70 @@ interface AITerminalProps {
   onBack: () => void
 }
 
+const simulateCommand = (command: string): string => {
+  const cmd = command.trim().toLowerCase()
+
+  if (cmd.includes("openssl version")) {
+    return "OpenSSL 3.0.2 15 Mar 2022 (Library: OpenSSL 3.0.2 15 Mar 2022)"
+  }
+
+  if (cmd.includes("openssl genrsa")) {
+    const keySize = cmd.match(/\d{4}/) ? cmd.match(/\d{4}/)?.[0] : "2048"
+    return `Generating RSA private key, ${keySize} bit long modulus (2 primes)
+.......+++++
+......................+++++
+e is 65537 (0x010001)`
+  }
+
+  if (cmd.includes("openssl req") && cmd.includes("-new")) {
+    return `You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+-----
+Country Name (2 letter code) [AU]:US
+State or Province Name (full name) [Some-State]:California
+Locality Name (eg, city) []:San Francisco
+Organization Name (eg, company) [Internet Widgits Pty Ltd]:Example Corp
+Organizational Unit Name (eg, section) []:IT Department
+Common Name (e.g. server FQDN or YOUR name) []:example.com
+Email Address []:admin@example.com`
+  }
+
+  if (cmd.includes("ls") || cmd.includes("dir")) {
+    return `private.key  certificate.csr  certificate.crt`
+  }
+
+  if (cmd.includes("cat") || cmd.includes("type")) {
+    return `-----BEGIN CERTIFICATE REQUEST-----
+MIICvDCCAaQCAQAwdzELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWEx
+FjAUBgNVBAcMDVNhbiBGcmFuY2lzY28xFTATBgNVBAoMDEV4YW1wbGUgQ29ycDEU
+MBIGA1UECwwLSVQgRGVwYXJ0bWVudDEOMAwGA1UEAwwFZXhhbXBsZTCCASIwDQYJ
+...
+-----END CERTIFICATE REQUEST-----`
+  }
+
+  if (cmd.includes("help") || cmd === "?") {
+    return `Available OpenSSL commands:
+  openssl version          - Display OpenSSL version
+  openssl genrsa          - Generate RSA private key
+  openssl req             - Create certificate request
+  openssl x509            - Certificate display and signing
+  
+Type 'help <command>' for more information on a specific command.`
+  }
+
+  return `Command executed: ${command}`
+}
+
 export function AITerminal({ onBack }: AITerminalProps) {
   const [input, setInput] = useState("")
   const [commandOptions, setCommandOptions] = useState<string[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
+  const [commandOutputs, setCommandOutputs] = useState<Array<{ command: string; output: string }>>([])
   const terminalRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, stop } = useChat({
     transport: new DefaultChatTransport({ api: "/api/ai-chat" }),
   })
 
@@ -29,7 +85,19 @@ export function AITerminal({ onBack }: AITerminalProps) {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, commandOutputs, status])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === "c" && status === "in_progress") {
+        e.preventDefault()
+        stop()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [status, stop])
 
   // Parse AI responses for command options
   useEffect(() => {
@@ -55,13 +123,27 @@ export function AITerminal({ onBack }: AITerminalProps) {
     e.preventDefault()
     if (!input.trim() || status === "in_progress") return
 
-    sendMessage({ text: input })
+    const trimmedInput = input.trim()
+    if (
+      trimmedInput.startsWith("openssl") ||
+      ["ls", "dir", "cat", "help"].some((cmd) => trimmedInput.startsWith(cmd))
+    ) {
+      const output = simulateCommand(trimmedInput)
+      setCommandOutputs((prev) => [...prev, { command: trimmedInput, output }])
+      // Send both command and output to AI for context
+      sendMessage({ text: `I executed: ${trimmedInput}\n\nOutput:\n${output}` })
+    } else {
+      sendMessage({ text: trimmedInput })
+    }
+
     setInput("")
     setShowDropdown(false)
   }
 
   const handleCommandSelect = (command: string) => {
-    sendMessage({ text: command })
+    const output = simulateCommand(command)
+    setCommandOutputs((prev) => [...prev, { command, output }])
+    sendMessage({ text: `I executed: ${command}\n\nOutput:\n${output}` })
     setShowDropdown(false)
   }
 
@@ -85,6 +167,7 @@ export function AITerminal({ onBack }: AITerminalProps) {
               <h1 className="text-xl font-bold text-white">AI Learning Assistant</h1>
             </div>
           </div>
+          {status === "in_progress" && <div className="text-sm text-gray-400">Press Ctrl+C to stop generation</div>}
         </div>
       </div>
 
@@ -144,12 +227,28 @@ export function AITerminal({ onBack }: AITerminalProps) {
                       )}
                     </div>
                   ))}
-                  {status === "in_progress" && <div className="text-yellow-400">AI is thinking...</div>}
+
+                  {commandOutputs.map((item, index) => (
+                    <div key={`cmd-${index}`} className="space-y-1">
+                      <div>
+                        <span className="text-blue-400">user@terminal:~$ </span>
+                        <span className="text-white">{item.command}</span>
+                      </div>
+                      <div className="text-gray-300 whitespace-pre-wrap ml-4">{item.output}</div>
+                    </div>
+                  ))}
+
+                  {status === "in_progress" && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-blue-400">user@terminal:~$</span>
+                      <span className="text-yellow-400 animate-pulse">▊</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Input area */}
                 <div className="mt-4 flex-shrink-0">
-                  {showDropdown && commandOptions.length > 0 ? (
+                  {showDropdown && commandOptions.length > 0 && status !== "in_progress" ? (
                     <div className="flex items-center gap-2">
                       <span className="text-blue-400">user@terminal:~$</span>
                       <Select onValueChange={handleCommandSelect}>
@@ -171,19 +270,20 @@ export function AITerminal({ onBack }: AITerminalProps) {
                     </div>
                   ) : null}
 
-                  <form onSubmit={handleSubmit} className="flex items-center gap-2 mt-2">
-                    <span className="text-blue-400">user@terminal:~$</span>
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={input}
-                      onChange={handleInputChange}
-                      disabled={status === "in_progress"}
-                      placeholder={showDropdown ? "Or type your response..." : "Type your message..."}
-                      className="flex-1 bg-transparent border-none outline-none text-white font-mono placeholder-gray-600"
-                      autoFocus
-                    />
-                  </form>
+                  {status !== "in_progress" && (
+                    <form onSubmit={handleSubmit} className="flex items-center gap-2 mt-2">
+                      <span className="text-blue-400">user@terminal:~$</span>
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={input}
+                        onChange={handleInputChange}
+                        placeholder={showDropdown ? "Or type your response..." : "Type your message..."}
+                        className="flex-1 bg-transparent border-none outline-none text-white font-mono placeholder-gray-600"
+                        autoFocus
+                      />
+                    </form>
+                  )}
                 </div>
               </div>
             </CardContent>
