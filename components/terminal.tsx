@@ -1,11 +1,14 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CheckCircle } from "lucide-react"
-import { terminalCommands } from "@/lib/terminal-data"
+import { terminalModules } from "@/lib/terminal-data"
 import InteractiveCSR from "@/components/interactive-csr"
+import { Input } from "@/components/ui/input"
 
 interface TerminalProps {
   moduleId: string
@@ -14,38 +17,37 @@ interface TerminalProps {
 }
 
 export default function Terminal({ moduleId, onComplete, isCompleted }: TerminalProps) {
+  const module = terminalModules[moduleId]
+
   const [history, setHistory] = useState<Array<{ type: "input" | "output"; content: string }>>([
-    { type: "output", content: "Welcome to the OpenSSL CSR Generator Terminal" },
-    { type: "output", content: "Select a command from the dropdown below..." },
+    { type: "output", content: module?.introduction || "Welcome to the terminal..." },
   ])
+
   const [executedCommands, setExecutedCommands] = useState<Set<string>>(new Set())
   const [successfulCommands, setSuccessfulCommands] = useState<Set<string>>(new Set())
   const [commandState, setCommandState] = useState<Record<string, boolean>>({})
   const [selectedCommand, setSelectedCommand] = useState<string>("")
+  const [inputValue, setInputValue] = useState<string>("")
   const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const terminalRef = useRef<HTMLDivElement>(null)
   const selectRef = useRef<HTMLButtonElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const [isInteractiveMode, setIsInteractiveMode] = useState(false)
   const [interactiveCommand, setInteractiveCommand] = useState<string>("")
 
-  // Get commands for current module
-  const availableCommands = terminalCommands[moduleId] || []
+  const availableCommands = module?.commands || []
 
-  // Reset terminal when module changes
   useEffect(() => {
-    setHistory([
-      { type: "output", content: "Welcome to the OpenSSL CSR Generator Terminal" },
-      { type: "output", content: "Select a command from the dropdown below..." },
-    ])
+    setHistory([{ type: "output", content: module?.introduction || "Welcome to the terminal..." }])
     setExecutedCommands(new Set())
     setSuccessfulCommands(new Set())
     setCommandState({})
     setSelectedCommand("")
+    setInputValue("")
     setShowSuccessMessage(false)
-  }, [moduleId])
+  }, [moduleId, module])
 
   const handleInteractiveCSRComplete = (values: Record<string, string>) => {
-    // Format the CSR values for display
     const formattedValues = [
       `Country Name (2 letter code) [US]:${values.country || ""}`,
       `State or Province Name (full name) [California]:${values.state || ""}`,
@@ -65,61 +67,94 @@ export default function Terminal({ moduleId, onComplete, isCompleted }: Terminal
       `CSR created successfully and saved to request.csr.`,
     ].join("\n")
 
-    // Add the response to history
     setHistory((prev) => [...prev, { type: "output", content: formattedValues }])
-
-    // Exit interactive mode
     setIsInteractiveMode(false)
-
-    // Mark the command as executed and successful
     setExecutedCommands((prev) => new Set(prev).add(interactiveCommand))
     setSuccessfulCommands((prev) => new Set(prev).add(interactiveCommand))
-
-    // Store the CSR values for later use
     setCommandState((prev) => ({
       ...prev,
       csrExists: true,
-      csrValues: values, // Store the actual values entered
+      csrValues: values,
     }))
 
-    // Check if this completes the exercise
     const allPrerequisitesMet = checkAllPrerequisites()
     if (allPrerequisitesMet) {
       completeExercise()
     }
   }
 
-  // Add this function to handle cancellation of interactive mode
   const handleInteractiveCancel = () => {
     setIsInteractiveMode(false)
     setHistory((prev) => [...prev, { type: "output", content: "CSR generation cancelled." }])
   }
 
-  const handleCommandSelect = (command: string) => {
-    // Find the command object
-    const commandObj = availableCommands.find((cmd) => cmd.value === command)
-
-    if (!commandObj) return
-
-    // Add the selected command to history with the full command text
-    setHistory((prev) => [...prev, { type: "input", content: command }])
-
-    // Check if this is an interactive command
-    if (commandObj.interactive) {
-      setIsInteractiveMode(true)
-      setInteractiveCommand(command)
+  const executeCommand = (command: string) => {
+    if (command.toLowerCase() === "help") {
+      const helpCommand = availableCommands.find((cmd) => cmd.value === "help")
+      if (helpCommand) {
+        setHistory((prev) => [
+          ...prev,
+          { type: "input", content: command },
+          { type: "output", content: helpCommand.response },
+        ])
+      } else {
+        setHistory((prev) => [
+          ...prev,
+          { type: "input", content: command },
+          { type: "output", content: "No help available for this step." },
+        ])
+      }
+      setInputValue("")
+      setSelectedCommand("")
       return
     }
 
-    // Get the appropriate response based on command state
-    let response = commandObj.response
-    let isCommandSuccessful = true // Assume success by default
+    const commandObj = availableCommands.find((cmd) => cmd.value === command)
 
-    // Special handling for viewing CSR contents to show the actual values entered
+    if (!commandObj) {
+      const similarCommand = availableCommands.find(
+        (cmd) => cmd.value !== "help" && command.toLowerCase().includes(cmd.value.toLowerCase().split(" ")[0]),
+      )
+
+      if (similarCommand) {
+        setHistory((prev) => [
+          ...prev,
+          { type: "input", content: command },
+          {
+            type: "output",
+            content: `⚠️  Command not recognized. Did you mean: ${similarCommand.value}?\n\n💡 TIP: Type 'help' for available commands.`,
+          },
+        ])
+      } else {
+        setHistory((prev) => [
+          ...prev,
+          { type: "input", content: command },
+          {
+            type: "output",
+            content: `❌ Command not found: ${command}\n\n💡 TIP: Type 'help' to see available commands.`,
+          },
+        ])
+      }
+      setInputValue("")
+      setSelectedCommand("")
+      return
+    }
+
+    setHistory((prev) => [...prev, { type: "input", content: command }])
+
+    if (commandObj.interactive) {
+      setIsInteractiveMode(true)
+      setInteractiveCommand(command)
+      setInputValue("")
+      setSelectedCommand("")
+      return
+    }
+
+    let response = commandObj.response
+    let isCommandSuccessful = true
+
     if (command === "openssl req -text -noout -in request.csr" && commandState.csrValues) {
       const values = commandState.csrValues as Record<string, string>
-
-      // Use the actual values or defaults if empty
       const country = values.country || "US"
       const state = values.state || "California"
       const locality = values.locality || "San Francisco"
@@ -147,10 +182,8 @@ export default function Terminal({ moduleId, onComplete, isCompleted }: Terminal
          ...`
     }
 
-    // Check for conditional responses
     if (commandObj.conditionalResponses) {
       for (const condition of commandObj.conditionalResponses) {
-        // Check if the condition is met
         const conditionMet = condition.requires
           ? condition.requires.every((req) => commandState[req] || successfulCommands.has(req))
           : condition.requiresNot
@@ -159,11 +192,11 @@ export default function Terminal({ moduleId, onComplete, isCompleted }: Terminal
 
         if (conditionMet) {
           response = condition.response
-          // If this is an error response (contains specific error messages), mark as unsuccessful
           if (
             response.includes("No such file or directory") ||
             response.includes("Error:") ||
-            response.includes("command not found")
+            response.includes("command not found") ||
+            response.includes("❌")
           ) {
             isCommandSuccessful = false
           }
@@ -172,17 +205,12 @@ export default function Terminal({ moduleId, onComplete, isCompleted }: Terminal
       }
     }
 
-    // Add the response to history
     setHistory((prev) => [...prev, { type: "output", content: response }])
-
-    // Mark this command as executed
     setExecutedCommands((prev) => new Set(prev).add(command))
 
-    // If command was successful, mark it as such
     if (isCommandSuccessful) {
       setSuccessfulCommands((prev) => new Set(prev).add(command))
 
-      // Update command state
       if (commandObj.setsState) {
         setCommandState((prev) => ({
           ...prev,
@@ -191,50 +219,57 @@ export default function Terminal({ moduleId, onComplete, isCompleted }: Terminal
       }
     }
 
-    // Check if this is the final command that completes the exercise
-    if (commandObj.completesExercise && isCommandSuccessful) {
-      // Check if all required prerequisites have been successfully executed
+    if (commandObj.completesStep && isCommandSuccessful) {
       const allPrerequisitesMet = checkAllPrerequisites()
-
       if (allPrerequisitesMet) {
         completeExercise()
       }
     }
 
-    // Clear the selected command after execution
+    setInputValue("")
     setSelectedCommand("")
 
-    // Focus back on the select dropdown to keep it accessible
     setTimeout(() => {
-      if (selectRef.current) {
+      if (inputValue && inputRef.current) {
+        inputRef.current.focus()
+      } else if (selectRef.current) {
         selectRef.current.focus()
       }
     }, 100)
   }
 
+  const handleCommandSelect = (command: string) => {
+    executeCommand(command)
+  }
+
+  const handleInputSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && inputValue.trim()) {
+      executeCommand(inputValue.trim())
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value)
+  }
+
   const checkAllPrerequisites = () => {
-    // For each module, define the specific prerequisites
     switch (moduleId) {
       case "install-openssl":
-        // Need to have successfully installed OpenSSL AND checked the version
         return commandState.opensslInstalled === true && successfulCommands.has("openssl version")
 
       case "create-private-key":
-        // Need to have successfully generated the key AND set permissions
         return (
           successfulCommands.has("openssl genrsa -out private_key.pem 2048") &&
           successfulCommands.has("chmod 600 private_key.pem")
         )
 
       case "create-csr":
-        // Need to have successfully created the CSR AND viewed its contents
         return (
           successfulCommands.has("openssl req -new -key private_key.pem -out request.csr") &&
           successfulCommands.has("openssl req -text -noout -in request.csr")
         )
 
       case "verify-key-csr":
-        // Need to have checked both moduli AND compared them
         return (
           successfulCommands.has("openssl req -noout -modulus -in request.csr | openssl md5") &&
           successfulCommands.has("openssl rsa -noout -modulus -in private_key.pem | openssl md5") &&
@@ -242,14 +277,12 @@ export default function Terminal({ moduleId, onComplete, isCompleted }: Terminal
         )
 
       case "verify-chain":
-        // Need to have run both the verify command and the certificate details command
         return (
           successfulCommands.has("openssl verify -CAfile full_chain.pem signed_cert.pem") &&
           successfulCommands.has("openssl x509 -in signed_cert.pem -text -noout | grep 'Issuer\\|Subject'")
         )
 
       case "build-chain":
-        // Need to have built the chain correctly, verified it, and inspected it
         return (
           successfulCommands.has("cat signed_cert.pem intermediate.pem root.pem > full_chain.pem") &&
           successfulCommands.has("openssl verify -CAfile full_chain.pem signed_cert.pem") &&
@@ -275,16 +308,13 @@ export default function Terminal({ moduleId, onComplete, isCompleted }: Terminal
     }
   }
 
-  // Auto-scroll to bottom when history changes
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight
     }
   }, [history])
 
-  // Check if the exercise should be completed after each successful command
   useEffect(() => {
-    // Only run this check if we haven't already shown the success message
     if (!showSuccessMessage) {
       const allPrerequisitesMet = checkAllPrerequisites()
       if (allPrerequisitesMet) {
@@ -298,15 +328,15 @@ export default function Terminal({ moduleId, onComplete, isCompleted }: Terminal
   }
 
   return (
-    <Card className="border-gray-800">
-      <CardHeader className="bg-gray-900 text-white border-b border-gray-700 rounded-t-lg flex flex-row items-center justify-between">
+    <Card className="border-gray-800 h-full flex flex-col space-y-0 border-none">
+      <CardHeader className="bg-gray-900 text-white border-gray-700 flex flex-row items-center justify-between px-2 flex-shrink-0 py-1 border-b rounded-sm my-[-30px]">
         <CardTitle className="text-sm font-mono flex items-center">
           <div className="flex space-x-2 mr-2">
             <div className="w-3 h-3 rounded-full bg-red-500"></div>
             <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
             <div className="w-3 h-3 rounded-full bg-green-500"></div>
           </div>
-          Terminal
+          {module?.title || "Terminal"}
         </CardTitle>
         {isCompleted && (
           <div className="flex items-center text-green-400">
@@ -315,8 +345,11 @@ export default function Terminal({ moduleId, onComplete, isCompleted }: Terminal
           </div>
         )}
       </CardHeader>
-      <CardContent className="p-0">
-        <div className="bg-black text-green-400 font-mono text-sm p-4 h-80 overflow-y-auto" ref={terminalRef}>
+      <CardContent className="!p-0 bg-black flex-1 min-h-0">
+        <div
+          className="bg-black text-green-400 font-mono text-sm h-full overflow-y-auto px-3 pt-0 pb-4"
+          ref={terminalRef}
+        >
           {history.map((entry, index) => (
             <div key={index} className="whitespace-pre-wrap mb-1">
               {entry.type === "input" ? (
@@ -332,23 +365,46 @@ export default function Terminal({ moduleId, onComplete, isCompleted }: Terminal
           {isInteractiveMode ? (
             <InteractiveCSR onComplete={handleInteractiveCSRComplete} onCancel={handleInteractiveCancel} />
           ) : (
-            <div className="flex items-center mt-2">
-              <span className="text-blue-400 mr-2">user@server:~$</span>
-              <Select value={selectedCommand} onValueChange={handleCommandSelect}>
-                <SelectTrigger
-                  ref={selectRef}
-                  className="bg-transparent border-none text-green-400 focus:ring-0 focus:ring-offset-0 w-full max-w-[500px]"
-                >
-                  <SelectValue placeholder="Select a command..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableCommands.map((command) => (
-                    <SelectItem key={command.value} value={command.value}>
-                      {command.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex items-center mt-2 gap-2">
+              <span className="text-blue-400">user@server:~$</span>
+              {inputValue ? (
+                <div className="flex-1 flex items-center gap-2">
+                  <Input
+                    ref={inputRef}
+                    value={inputValue}
+                    onChange={handleInputChange}
+                    onKeyDown={handleInputSubmit}
+                    placeholder="Type a command or 'help'..."
+                    className="bg-transparent border-none text-green-400 focus-visible:ring-0 focus-visible:ring-offset-0 font-mono p-0"
+                    autoFocus
+                  />
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center gap-2">
+                  <Select value={selectedCommand} onValueChange={handleCommandSelect}>
+                    <SelectTrigger
+                      ref={selectRef}
+                      className="bg-transparent border-none text-green-400 focus:ring-0 focus:ring-offset-0 flex-1"
+                      onKeyDown={(e) => {
+                        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                          setInputValue(e.key)
+                          setTimeout(() => inputRef.current?.focus(), 0)
+                          e.preventDefault()
+                        }
+                      }}
+                    >
+                      <SelectValue placeholder="Select a command..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableCommands.map((command) => (
+                        <SelectItem key={command.value} value={command.value}>
+                          {command.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           )}
         </div>
