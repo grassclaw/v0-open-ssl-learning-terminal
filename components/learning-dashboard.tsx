@@ -88,9 +88,10 @@ const learningPaths: LearningPath[] = [
 
 interface LearningDashboardProps {
   onSelectPath: (pathId: string) => void
+  onStartAI: () => void // Added AI mode handler prop
 }
 
-export default function LearningDashboard({ onSelectPath }: LearningDashboardProps) {
+export default function LearningDashboard({ onSelectPath, onStartAI }: LearningDashboardProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-8">
       <div className="max-w-7xl mx-auto">
@@ -103,6 +104,7 @@ export default function LearningDashboard({ onSelectPath }: LearningDashboardPro
         </div>
 
         <Button
+          onClick={onStartAI}
           className="w-full mb-8 h-14 text-lg font-semibold bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 shadow-lg hover:shadow-xl transition-all duration-200"
           size="lg"
         >

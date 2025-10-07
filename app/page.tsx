@@ -7,10 +7,11 @@ import Navigation from "@/components/navigation"
 import CompletionButton from "@/components/completion-button"
 import CongratsPage from "@/components/congrats-page"
 import LearningDashboard from "@/components/learning-dashboard"
+import { AITerminal } from "@/components/ai-terminal"
 import { terminalModules } from "@/lib/terminal-data"
 
 export default function CSRLearningModule() {
-  const [currentView, setCurrentView] = useState<"dashboard" | "learning">("dashboard")
+  const [currentView, setCurrentView] = useState<"dashboard" | "learning" | "ai">("dashboard")
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
 
   const moduleIds = Object.keys(terminalModules)
@@ -29,6 +30,10 @@ export default function CSRLearningModule() {
   const handleSelectPath = (pathId: string) => {
     setSelectedPath(pathId)
     setCurrentView("learning")
+  }
+
+  const handleStartAIMode = () => {
+    setCurrentView("ai")
   }
 
   const goToNextModule = () => {
@@ -63,8 +68,12 @@ export default function CSRLearningModule() {
     setSelectedPath(null)
   }
 
+  if (currentView === "ai") {
+    return <AITerminal onBack={() => setCurrentView("dashboard")} />
+  }
+
   if (currentView === "dashboard") {
-    return <LearningDashboard onSelectPath={handleSelectPath} />
+    return <LearningDashboard onSelectPath={handleSelectPath} onStartAI={handleStartAIMode} />
   }
 
   return (
