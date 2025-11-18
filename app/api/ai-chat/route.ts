@@ -1,4 +1,4 @@
-import { streamText, convertToModelMessages, type UIMessage } from "ai"
+import { streamText } from "ai"
 import { openai } from "@ai-sdk/openai"
 
 export const maxDuration = 30
@@ -34,13 +34,13 @@ Available OpenSSL topics:
 - Certificate Validation`
 
 export async function POST(req: Request) {
-  const { messages }: { messages: UIMessage[] } = await req.json()
+  const { messages } = await req.json()
 
   const result = streamText({
     model: openai("gpt-4o-mini"),
-    messages: [{ role: "system", content: SYSTEM_PROMPT }, ...convertToModelMessages(messages)],
+    messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
     temperature: 0.7,
-    maxOutputTokens: 1000,
+    maxTokens: 1000,
   })
 
   return result.toUIMessageStreamResponse()
